@@ -73,6 +73,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   
   var p = object._points;
   var n = object._normals;
+  var c = object._colors;
   
   var _data = new Uint8Array(data);
   
@@ -81,6 +82,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   // allocate memory using a good guess
   object._points = p = new X.triplets(data.byteLength);
   object._normals = n = new X.triplets(data.byteLength);
+  object._colors = c = new X.triplets(data.byteLength);
   
   // convert the char array to a string
   // the quantum is necessary to deal with large data
@@ -100,6 +102,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   // figure out the exact size later. this is faster.
   this._unorderedPoints = null;
   this._unorderedNormals = null;
+  this._unorderedPointScalars = null;
   
   // .. we also need a buffer for all indices
   this._geometries = [];
@@ -119,6 +122,9 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   this._pointDataMode = false;
   // one type of pointData are normals and right now the only supported ones
   this._normalsMode = false;
+
+  // support for scalar point data
+  this._pointScalarsMode = false; 
   
 
   //
@@ -162,7 +168,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   }
   
   // now, configure the object according to the objectType
-  this.configure(p, n);
+  this.configure(p, n, c);
   
   // .. and set the objectType
   object._type = this._objectType;
@@ -214,6 +220,7 @@ X.parserVTK.prototype.parseLine = function(line) {
     var numberOfPoints = parseInt(lineFields[1], 10);
     this._unorderedPoints = new X.triplets(numberOfPoints * 3);
     this._unorderedNormals = new X.triplets(numberOfPoints * 3);
+    this._unorderedPointScalars = new X.triplets(numberOfPoints * 3);
     
     // go to next line
     return;
@@ -302,7 +309,6 @@ X.parserVTK.prototype.parseLine = function(line) {
     this._pointDataMode = true;
     this._pointsMode = false;
     this._geometryMode = false;
-    
     // go to next line
     return;
     
@@ -381,16 +387,27 @@ X.parserVTK.prototype.parseLine = function(line) {
       return;
       
     }
+
+    // support for scalar point_data
+    // no support for LOOKUP_TABLES
+    if (firstLineField == 'SCALARS') {
+
+	this._pointScalarsMode = true;
+	return;
+    }
     
-    if (numberOfLineFields == 1 || isNaN(parseFloat(firstLineField))) {
+      // scalars only have OneLneField
+    //if (numberOfLineFields == 1 || isNaN(parseFloat(firstLineField))) {
+      if (firstLineField!='LOOKUP_TABLE' && isNaN(parseFloat(firstLineField))) {
       
       // this likely means end of pointDataMode
-      this._pointDataMode = false;
-      this._normalsMode = false;
+	  this._pointDataMode = false;
+	  this._normalsMode = false;
+	  this._pointScalarsMode = false;
       
-      return;
+	  return;
       
-    }
+      }
     
     // the normals mode
     if (this._normalsMode) {
@@ -417,6 +434,17 @@ X.parserVTK.prototype.parseLine = function(line) {
       }
       
     } // end of normalsMode
+
+    // the point scalars mode
+    if (this._pointScalarsMode) {
+	// ignores the LOOKUP_TABLE line
+	if (numberOfLineFields != 2) {
+	    var scalar = parseFloat(lineFields[0]);
+	    this._unorderedPointScalars.add(scalar);
+	}
+	
+    } // end of pointScalarsMode
+
     
   } // end of pointDataMode
   
@@ -430,13 +458,16 @@ X.parserVTK.prototype.parseLine = function(line) {
  * @param {!X.triplets} p The points container of the X.object.
  * @param {!X.triplets} n The normals container of the X.object.
  */
-X.parserVTK.prototype.configure = function(p, n) {
+X.parserVTK.prototype.configure = function(p, n, c) {
 
   var unorderedPoints = this._unorderedPoints;
   var unorderedNormals = this._unorderedNormals;
+  var unorderedPointScalars = this._unorderedPointScalars;
   
   // cache often used values for fast access
   var numberOfUnorderedNormals = unorderedNormals.length;
+  var numberOfUnorderedPointScalars = unorderedPointScalars.length;
+    //console.log(numberOfUnorderedNormals);
   
   var numberOfGeometries = this._geometries.length;
   var i = numberOfGeometries;
@@ -572,6 +603,224 @@ X.parserVTK.prototype.configure = function(p, n) {
             
             // add the artificial normal again
             n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+      }
+
+      //
+      // NORMALS
+      // 
+      if (currentIndex < numberOfUnorderedNormals) {
+        
+        // grab the normal with the currentIndex, if it exists
+        var currentNormals = unorderedNormals.get(currentIndex);
+        
+        // .. and add it
+        n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
+        
+        // for LINES, add the next normal (neighbor)
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // the neighbor
+          var nextNormals = unorderedNormals.get(nextIndex);
+          
+          // .. and add it
+          n.add(nextNormals[0], nextNormals[1], nextNormals[2]);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // if this is the first or last point of the triangle strip, add it
+            // again
+            n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+
+      } else {
+        
+        // add an artificial normal
+        var artificialNormal = new goog.math.Vec3(currentPoint[0],
+            currentPoint[1], currentPoint[2]);
+        artificialNormal.normalize();
+        n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
+        
+        // for LINES, do it again
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // grab the next normal (artificial)
+          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
+              nextPoint[1], nextPoint[2]);
+          artificialNormal2.normalize();
+          n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // add the artificial normal again
+            n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+      }
+
+      //
+      // NORMALS
+      // 
+      if (currentIndex < numberOfUnorderedNormals) {
+        
+        // grab the normal with the currentIndex, if it exists
+        var currentNormals = unorderedNormals.get(currentIndex);
+        
+        // .. and add it
+        n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
+        
+        // for LINES, add the next normal (neighbor)
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // the neighbor
+          var nextNormals = unorderedNormals.get(nextIndex);
+          
+          // .. and add it
+          n.add(nextNormals[0], nextNormals[1], nextNormals[2]);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // if this is the first or last point of the triangle strip, add it
+            // again
+            n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+
+      } else {
+        
+        // add an artificial normal
+        var artificialNormal = new goog.math.Vec3(currentPoint[0],
+            currentPoint[1], currentPoint[2]);
+        artificialNormal.normalize();
+        n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
+        
+        // for LINES, do it again
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // grab the next normal (artificial)
+          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
+              nextPoint[1], nextPoint[2]);
+          artificialNormal2.normalize();
+          n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // add the artificial normal again
+            n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+      }
+
+      //
+      // POINT SCALARS
+      // 
+      if (currentIndex < numberOfUnorderedPointScalars) {
+        
+        // grab the point scalar with the currentIndex, if it exists
+        var currentPointScalar = unorderedPointScalars.get(currentIndex);
+        
+        // .. and add it
+	// use temporary color for now. somehow we have to scale these.
+	  var red = 0.9;
+	  var green = 0.4;
+	  var blue = 0.0;
+	  
+        c.add(red, green, blue);
+        
+        // for LINES, add the next normal (neighbor)
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // the neighbor
+          var nextPointScalar = unorderedPointScalars.get(nextIndex);
+          
+          // .. and add it
+          c.add(red, green, blue);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // if this is the first or last point of the triangle strip, add it
+            // again
+            c.add(red, green, blue);
+            
+          }
+          
+        } // TRIANGLE_STRIPS
+        
+
+      } else {
+        
+        // add an artificial scalar
+        //var artificialPointScalar = new goog.math.Vec3(currentPoint[0],
+        //    currentPoint[1], currentPoint[2]);
+        //artificialNormal.normalize();
+        c.add(0.0, 0.0, 0.0);
+        
+        // for LINES, do it again
+        if (this._objectType == X.displayable.types.LINES) {
+          
+          // grab the next normal (artificial)
+          //var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
+          //    nextPoint[1], nextPoint[2]);
+          //artificialNormal2.normalize();
+          c.add(0.0, 0.0, 0.0);
+          
+        } // LINES
+        
+        // for TRIANGLE_STRIPS, special case
+        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
+          
+          // check if this is the first or last element
+          if (k == 0 || k == currentGeometryLength - 1) {
+            
+            // add the artificial normal again
+            c.add(0.0,0.0,0.0);
             
           }
           
