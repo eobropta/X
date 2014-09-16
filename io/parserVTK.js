@@ -73,7 +73,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   
   var p = object._points;
   var n = object._normals;
-  var c = object._colors;
+  var s = object._scalars;
   
   var _data = new Uint8Array(data);
   
@@ -82,7 +82,8 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   // allocate memory using a good guess
   object._points = p = new X.triplets(data.byteLength);
   object._normals = n = new X.triplets(data.byteLength);
-  object._colors = c = new X.triplets(data.byteLength);
+  //object._colors = c = new X.triplets(data.byteLength);
+  object._scalars = s = new X.scalars();
   
   // convert the char array to a string
   // the quantum is necessary to deal with large data
@@ -103,6 +104,8 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   this._unorderedPoints = null;
   this._unorderedNormals = null;
   this._unorderedPointScalars = null;
+  // store names of point scalars that are not normals
+  this._pointScalarsNames = new Array();
   
   // .. we also need a buffer for all indices
   this._geometries = [];
@@ -125,6 +128,10 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
 
   // support for scalar point data
   this._pointScalarsMode = false; 
+
+  // this counter keeps track of how many scalars are in the vtk file
+  // starts at negative 1 so first increment is 0
+  this._pointScalarsIdx = -1;
   
 
   //
@@ -168,7 +175,7 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   }
   
   // now, configure the object according to the objectType
-  this.configure(p, n, c);
+  this.configure(p, n, s);
   
   // .. and set the objectType
   object._type = this._objectType;
@@ -220,7 +227,9 @@ X.parserVTK.prototype.parseLine = function(line) {
     var numberOfPoints = parseInt(lineFields[1], 10);
     this._unorderedPoints = new X.triplets(numberOfPoints * 3);
     this._unorderedNormals = new X.triplets(numberOfPoints * 3);
-    this._unorderedPointScalars = new X.triplets(numberOfPoints * 3);
+    //this._unorderedPointScalars = new X.triplets(numberOfPoints * 3);
+      this._unorderedPointScalars = new Array();
+    
     
     // go to next line
     return;
@@ -382,7 +391,8 @@ X.parserVTK.prototype.parseLine = function(line) {
     
     if (firstLineField == 'NORMALS') {
       
-      this._normalsMode = true;
+	this._normalsMode = true;
+	this._pointScalarsMode = false;
       
       return;
       
@@ -393,25 +403,46 @@ X.parserVTK.prototype.parseLine = function(line) {
     if (firstLineField == 'SCALARS') {
 
 	this._pointScalarsMode = true;
+	this._normalsMode = false;
+	this._pointScalarsNames.push(lineFields[1]); 
+	this._pointScalarsIdx = this._pointScalarsIdx + 1;
+	//this._unorderedPointScalars[this._pointScalarsIdx] = new Array(numberOfPoints);
+	this._unorderedPointScalars[this._pointScalarsIdx] = [];
+	//this._pointScalarsIdx = this._pointScalarsIdx + 1;
 	return;
     }
+
+      // disregard LOOKUP_TABLE
+      if (firstLineField == 'LOOKUP_TABLE') {
+	  return;
+      }
     
       // scalars only have OneLneField
     //if (numberOfLineFields == 1 || isNaN(parseFloat(firstLineField))) {
-      if (firstLineField!='LOOKUP_TABLE' && isNaN(parseFloat(firstLineField))) {
+      //if (firstLineField!='LOOKUP_TABLE' && isNaN(parseFloat(firstLineField))) {
       
       // this likely means end of pointDataMode
-	  this._pointDataMode = false;
-	  this._normalsMode = false;
-	  this._pointScalarsMode = false;
+//	  this._pointDataMode = false;
+//	  this._normalsMode = false;
+//	  this._pointScalarsMode = false;
+	  
+      	  //console.log(firstLineField);
+	  //console.log(lineFields);
+//	  return;
       
-	  return;
-      
-      }
+//      }
     
     // the normals mode
     if (this._normalsMode) {
-      
+	// condition to exit normalsMode
+	if (numberOfLineFields == 1 || isNaN(parseFloat(firstLineField))) {
+	    this._normalsMode = false;
+	    // potential bug here. not sure normals and scalars in one file are handled.
+	    //this._pointDataMode = false;
+	    return
+	}
+
+
       // assume 9 coordinate values (== 3 points) in one row
       
       if (numberOfLineFields >= 3) {
@@ -437,10 +468,17 @@ X.parserVTK.prototype.parseLine = function(line) {
 
     // the point scalars mode
     if (this._pointScalarsMode) {
+	// condition to exit pointScalarsMode
+	if (numberOfLineFields != 1 || isNaN(parseFloat(firstLineField))) {
+	    this._pointsScalarsMode = false;
+	    // potential bug here. not sure normals and scalars in one file are handled.
+	    //this._pointDataMode = false;
+	    return
+	}
 	// ignores the LOOKUP_TABLE line
 	if (numberOfLineFields != 2) {
 	    var scalar = parseFloat(lineFields[0]);
-	    this._unorderedPointScalars.add(scalar);
+	    this._unorderedPointScalars[this._pointScalarsIdx].push(scalar);
 	}
 	
     } // end of pointScalarsMode
@@ -458,7 +496,7 @@ X.parserVTK.prototype.parseLine = function(line) {
  * @param {!X.triplets} p The points container of the X.object.
  * @param {!X.triplets} n The normals container of the X.object.
  */
-X.parserVTK.prototype.configure = function(p, n, c) {
+X.parserVTK.prototype.configure = function(p, n, s) {
 
   var unorderedPoints = this._unorderedPoints;
   var unorderedNormals = this._unorderedNormals;
@@ -466,9 +504,15 @@ X.parserVTK.prototype.configure = function(p, n, c) {
   
   // cache often used values for fast access
   var numberOfUnorderedNormals = unorderedNormals.length;
-  var numberOfUnorderedPointScalars = unorderedPointScalars.length;
-    //console.log(numberOfUnorderedNormals);
-  
+  var numberOfUnorderedPointScalars = unorderedPointScalars[1].length;
+
+    // initialize orderedPointScalars
+    //var orderedPointScalars = new Float32Array(numberOfUnorderedPointScalars * 3);
+    var orderedPointScalars = new Array();
+    
+
+
+  var pointIdx = 0;
   var numberOfGeometries = this._geometries.length;
   var i = numberOfGeometries;
   // we use this loop here since it's slightly faster than the for loop
@@ -477,50 +521,50 @@ X.parserVTK.prototype.configure = function(p, n, c) {
     // we want to loop through the geometries in the range 0..(N - 1)
     var currentGeometry = this._geometries[numberOfGeometries - i];
     var currentGeometryLength = currentGeometry.length;
-    
+
     // in the sub-loop we loop through the indices of the current geometry
     var k;
     for (k = 0; k < currentGeometryLength; k++) {
       
-      // boundary check for LINES
-      if (this._objectType == X.displayable.types.LINES &&
-          (k + 1 >= currentGeometryLength)) {
+	// boundary check for LINES
+	if (this._objectType == X.displayable.types.LINES &&
+            (k + 1 >= currentGeometryLength)) {
+            
+            // jump out since we reached the end of the geometry
+            break;
+            
+	}
+      
+	// grab the current index
+	var currentIndex = parseInt(currentGeometry[k], 10);
+	
+	// grab the point with the currentIndex
+	var currentPoint = unorderedPoints.get(currentIndex);
+	
+	//
+	// POINTS
+	//
+	
+	// .. and add it
+	p.add(currentPoint[0], currentPoint[1], currentPoint[2]);
+	
+	var nextIndex = currentIndex;
+	var nextPoint = currentPoint;
+	// special case for LINES: we add the next element twice to
+	// interrupt the line segments (in webGL, lines mode connects always 2
+	// points)
+	// if we would not do this, then all line segments would be connected
+	if (this._objectType == X.displayable.types.LINES) {
         
-        // jump out since we reached the end of the geometry
-        break;
-        
-      }
-      
-      // grab the current index
-      var currentIndex = parseInt(currentGeometry[k], 10);
-      
-      // grab the point with the currentIndex
-      var currentPoint = unorderedPoints.get(currentIndex);
-      
-      //
-      // POINTS
-      //
-      
-      // .. and add it
-      p.add(currentPoint[0], currentPoint[1], currentPoint[2]);
-      
-      var nextIndex = currentIndex;
-      var nextPoint = currentPoint;
-      // special case for LINES: we add the next element twice to
-      // interrupt the line segments (in webGL, lines mode connects always 2
-      // points)
-      // if we would not do this, then all line segments would be connected
-      if (this._objectType == X.displayable.types.LINES) {
-        
-        nextIndex = parseInt(currentGeometry[k + 1], 10);
-        // grab the next point
-        nextPoint = unorderedPoints.get(nextIndex);
-        
-        // and add it
-        p.add(nextPoint[0], nextPoint[1], nextPoint[2]);
-        
-      } // LINES
-      
+            nextIndex = parseInt(currentGeometry[k + 1], 10);
+            // grab the next point
+            nextPoint = unorderedPoints.get(nextIndex);
+            
+            // and add it
+            p.add(nextPoint[0], nextPoint[1], nextPoint[2]);
+            
+	} // LINES
+	
       // special case for TRIANGLE_STRIPS: we add the first and the
       // last element twice to interrupt the strips (as degenerated triangles)
       // if we would not do this, then all strips would be connected
@@ -758,24 +802,30 @@ X.parserVTK.prototype.configure = function(p, n, c) {
       if (currentIndex < numberOfUnorderedPointScalars) {
         
         // grab the point scalar with the currentIndex, if it exists
-        var currentPointScalar = unorderedPointScalars.get(currentIndex);
-        
+        var currentPointScalar = unorderedPointScalars[1][currentIndex];
+	  //orderedPointScalars[3*pointIdx + 0] = currentPointScalar;
+	  //orderedPointScalars[3*pointIdx + 1] = currentPointScalar;
+	  //xorderedPointScalars[3*pointIdx + 2] = currentPointScalar;
+	  orderedPointScalars.push(currentPointScalar);
+	  orderedPointScalars.push(currentPointScalar);
+	  orderedPointScalars.push(currentPointScalar);
+	  pointIdx++;
         // .. and add it
 	// use temporary color for now. somehow we have to scale these.
 	  var red = 0.9;
 	  var green = 0.4;
 	  var blue = 0.0;
 	  
-        c.add(red, green, blue);
+        //c.add(red, green, blue);
         
         // for LINES, add the next normal (neighbor)
         if (this._objectType == X.displayable.types.LINES) {
           
           // the neighbor
-          var nextPointScalar = unorderedPointScalars.get(nextIndex);
+          var nextPointScalar = unorderedPointScalars[nextIndex];
           
           // .. and add it
-          c.add(red, green, blue);
+          //c.add(red, green, blue);
           
         } // LINES
         
@@ -787,7 +837,7 @@ X.parserVTK.prototype.configure = function(p, n, c) {
             
             // if this is the first or last point of the triangle strip, add it
             // again
-            c.add(red, green, blue);
+            //c.add(red, green, blue);
             
           }
           
@@ -800,7 +850,7 @@ X.parserVTK.prototype.configure = function(p, n, c) {
         //var artificialPointScalar = new goog.math.Vec3(currentPoint[0],
         //    currentPoint[1], currentPoint[2]);
         //artificialNormal.normalize();
-        c.add(0.0, 0.0, 0.0);
+        //c.add(0.0, 0.0, 0.0);
         
         // for LINES, do it again
         if (this._objectType == X.displayable.types.LINES) {
@@ -809,7 +859,7 @@ X.parserVTK.prototype.configure = function(p, n, c) {
           //var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
           //    nextPoint[1], nextPoint[2]);
           //artificialNormal2.normalize();
-          c.add(0.0, 0.0, 0.0);
+          //c.add(0.0, 0.0, 0.0);
           
         } // LINES
         
@@ -820,7 +870,7 @@ X.parserVTK.prototype.configure = function(p, n, c) {
           if (k == 0 || k == currentGeometryLength - 1) {
             
             // add the artificial normal again
-            c.add(0.0,0.0,0.0);
+            //c.add(0.0,0.0,0.0);
             
           }
           
@@ -833,7 +883,61 @@ X.parserVTK.prototype.configure = function(p, n, c) {
     i--;
     
   } while (i > 0);
-  
+
+    // Assign Scalars to object as well as minimum/maximums and thresholds
+
+    // Turns out the thresholding is totally broken. You have to normalize all of the data to be between 0 and 1. Otherwise it breaks and doesn't look good. I could go in and try to fix the threholding but I'm not going to for now. This will prevent challenges when trying to render all of the data
+
+    // compute max and min values on unorderedPointScalars
+    var maxPointScalars = new Array(unorderedPointScalars.length);
+    var minPointScalars = new Array(unorderedPointScalars.length);
+    var shiftedPointScalars = new Array(unorderedPointScalars.length);
+
+    for (i=0; i< unorderedPointScalars.length; i++) {
+	// get max and min of array
+	maxPointScalars[i] = Math.max.apply(null, unorderedPointScalars[i]);
+	minPointScalars[i] = Math.min.apply(null, unorderedPointScalars[i]);
+	
+	// shift scalar data so its non-negative
+	// i don't use this actually
+	shiftedPointScalars[i] = new Array(unorderedPointScalars[i].length);
+	for (j=0; j<unorderedPointScalars[i].length; j++) {
+	    shiftedPointScalars[i][j] = unorderedPointScalars[i][j] - minPointScalars[i];
+	}
+    }
+    
+    
+    // attach min, max values and the whole shebang! (adopted from parserCRV.js)
+    s._min = 0;
+    s._max = 1;
+    // .. and set the default threshold
+    // only if the threshold was not already set
+    if (s._lowerThreshold == -Infinity) {
+	//s._lowerThreshold = minPointScalars[0];
+	//s._lowerThreshold = minPointScalars[1];
+	s._lowerThreshold = s._min;
+    }
+    if (s._upperThreshold == Infinity) {
+	//s._upperThreshold = maxPointScalars[0];
+	//s._upperThreshold = maxPointScalars[1];
+	s._upperThreshold = s._max;
+    }
+
+    var orderedPointScalarsFloat32 = new Float32Array(orderedPointScalars.length);
+    for (j=0;j<orderedPointScalars.length;j++) {
+	// shift orderedPointScalars so min is 0 and normalize so that values are between 0 and 1
+	orderedPointScalarsFloat32[j] = (orderedPointScalars[j] - minPointScalars[1]) / (maxPointScalars[1] - minPointScalars[1]);
+    }
+    
+    //s._array = unorderedPointScalars[0]; // the un-ordered scalars
+    //s._array = orderedPointScalarsFloat32;
+    s._array = orderedPointScalars;
+    s._glArray = orderedPointScalarsFloat32; // the ordered, gl-Ready
+    s._minColor = [0.0, 0.0, 1.0];
+    s._maxColor = [1.0, 0.0, 0.0];
+    // now mark the scalars dirty
+    s._dirty = true;
+
 };
 
 
