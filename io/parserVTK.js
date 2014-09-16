@@ -509,6 +509,9 @@ X.parserVTK.prototype.configure = function(p, n, s) {
     // initialize orderedPointScalars
     //var orderedPointScalars = new Float32Array(numberOfUnorderedPointScalars * 3);
     var orderedPointScalars = new Array();
+    for (j=0;j<unorderedPointScalars.length;j++) {
+	orderedPointScalars[j] = new Array();
+    }
     
 
 
@@ -802,14 +805,16 @@ X.parserVTK.prototype.configure = function(p, n, s) {
       if (currentIndex < numberOfUnorderedPointScalars) {
         
         // grab the point scalar with the currentIndex, if it exists
-        var currentPointScalar = unorderedPointScalars[1][currentIndex];
-	  //orderedPointScalars[3*pointIdx + 0] = currentPointScalar;
-	  //orderedPointScalars[3*pointIdx + 1] = currentPointScalar;
-	  //xorderedPointScalars[3*pointIdx + 2] = currentPointScalar;
-	  orderedPointScalars.push(currentPointScalar);
-	  orderedPointScalars.push(currentPointScalar);
-	  orderedPointScalars.push(currentPointScalar);
-	  pointIdx++;
+	  for (j=0;j<unorderedPointScalars.length;j++) {
+              var currentPointScalar = unorderedPointScalars[j][currentIndex];
+	      //orderedPointScalars[3*pointIdx + 0] = currentPointScalar;
+	      //orderedPointScalars[3*pointIdx + 1] = currentPointScalar;
+	      //xorderedPointScalars[3*pointIdx + 2] = currentPointScalar;
+	      orderedPointScalars[j].push(currentPointScalar);
+	      orderedPointScalars[j].push(currentPointScalar);
+	      orderedPointScalars[j].push(currentPointScalar);
+	      pointIdx++;
+	  }
         // .. and add it
 	// use temporary color for now. somehow we have to scale these.
 	  var red = 0.9;
@@ -908,26 +913,33 @@ X.parserVTK.prototype.configure = function(p, n, s) {
     
     
     // attach min, max values and the whole shebang! (adopted from parserCRV.js)
-    s._min = 0;
-    s._max = 1;
+    //s._min = 0.0;
+    //s._max = 1.0;
+    s._min = minPointScalars;
+    s._max = maxPointScalars;
     // .. and set the default threshold
     // only if the threshold was not already set
     if (s._lowerThreshold == -Infinity) {
 	//s._lowerThreshold = minPointScalars[0];
 	//s._lowerThreshold = minPointScalars[1];
-	s._lowerThreshold = s._min;
+	s._lowerThreshold = 0.0;
     }
     if (s._upperThreshold == Infinity) {
 	//s._upperThreshold = maxPointScalars[0];
 	//s._upperThreshold = maxPointScalars[1];
-	s._upperThreshold = s._max;
+	s._upperThreshold = 1.0;
     }
 
-    var orderedPointScalarsFloat32 = new Float32Array(orderedPointScalars.length);
-    for (j=0;j<orderedPointScalars.length;j++) {
-	// shift orderedPointScalars so min is 0 and normalize so that values are between 0 and 1
-	orderedPointScalarsFloat32[j] = (orderedPointScalars[j] - minPointScalars[1]) / (maxPointScalars[1] - minPointScalars[1]);
-    }
+    j = 0;
+    //for (j=0;j<orderedPointScalars.length;j++) {
+	var orderedPointScalarsFloat32 = new Float32Array(orderedPointScalars[j].length);
+
+	for (k=0;k<orderedPointScalars[j].length;k++) {
+	
+	    // shift orderedPointScalars so min is 0 and normalize so that values are between 0 and 1
+	    orderedPointScalarsFloat32[k] = (orderedPointScalars[j][k] - minPointScalars[j]) / (maxPointScalars[j] - minPointScalars[j]);
+	}
+    //}
     
     //s._array = unorderedPointScalars[0]; // the un-ordered scalars
     //s._array = orderedPointScalarsFloat32;
@@ -935,6 +947,7 @@ X.parserVTK.prototype.configure = function(p, n, s) {
     s._glArray = orderedPointScalarsFloat32; // the ordered, gl-Ready
     s._minColor = [0.0, 0.0, 1.0];
     s._maxColor = [1.0, 0.0, 0.0];
+    s._arrayNames = this._pointScalarsNames;
     // now mark the scalars dirty
     s._dirty = true;
 

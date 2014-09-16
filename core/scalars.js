@@ -77,6 +77,14 @@ X.scalars = function() {
   this._glArray = null;
 
   /**
+   * Names of scalar arrays
+   *
+   * @type {?array}
+   * @protected
+   */
+  this._arrayNames = null;
+
+  /**
    * Flag to replace the colors after thresholding. If FALSE, discard the
    * vertex.
    *
@@ -145,6 +153,50 @@ X.scalars.prototype.__defineGetter__('array', function() {
 X.scalars.prototype.__defineSetter__('array', function(array) {
 
   this._array = array;
+  this._glArray = array;
+
+  // also, mark this dirty so the renderer can pick it up
+  this._dirty = true;
+
+});
+
+/**
+ * Get the arrayNames containing the names of the scalars.
+ *
+ * @public
+ */
+X.scalars.prototype.__defineGetter__('arrayNames', function() {
+
+  return this._arrayNames;
+
+});
+
+/**
+ * Set the arrayNames containing the names of the scalar fields.
+ *
+ * @param {Array} array of strings
+ * @public
+ */
+X.scalars.prototype.__defineSetter__('arrayNames', function(array) {
+
+  this._arrayNames = array;
+
+});
+
+/**
+ * Set only the glarray containing the scalars. This array has to be WebGL-ready
+ * meaning that it has to match X.object.points.length, which equals 3 entries
+ * for each vertex (X,Y,Z coordinates). Calling this method marks this object as
+ * dirty so the X.renderer can pick it up. This method should be used
+ * externally.
+ *
+ * @param {Array} array The WebGL-ready array matching X.object._points.length
+ *          in size.
+ * @public
+ */
+X.scalars.prototype.__defineSetter__('glarray', function(array) {
+
+  //this._array = array;
   this._glArray = array;
 
   // also, mark this dirty so the renderer can pick it up
