@@ -548,13 +548,11 @@ X.parserVTK.prototype.configure = function(p, n, s) {
 	// grab the current index
 	var currentIndex = parseInt(currentGeometry[k], 10);
 	
-	// grab the point with the currentIndex
-	var currentPoint = unorderedPoints.get(currentIndex);
-	
 	//
 	// POINTS
 	//
-	
+	// grab the point with the currentIndex
+	var currentPoint = unorderedPoints.get(currentIndex);
 	// .. and add it
 	p.add(currentPoint[0], currentPoint[1], currentPoint[2]);
 	
@@ -590,7 +588,6 @@ X.parserVTK.prototype.configure = function(p, n, s) {
         }
         
       } // TRIANGLE_STRIPS
-      
 
 
       //
@@ -633,8 +630,9 @@ X.parserVTK.prototype.configure = function(p, n, s) {
       } else {
         
         // add an artificial normal
-        var artificialNormal = new goog.math.Vec3(currentPoint[0],
-            currentPoint[1], currentPoint[2]);
+	// reversed normal direction to give proper lightning
+        var artificialNormal = new goog.math.Vec3(-currentPoint[0],
+            -currentPoint[1], -currentPoint[2]);
         artificialNormal.normalize();
         n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
         
@@ -642,150 +640,8 @@ X.parserVTK.prototype.configure = function(p, n, s) {
         if (this._objectType == X.displayable.types.LINES) {
           
           // grab the next normal (artificial)
-          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
-              nextPoint[1], nextPoint[2]);
-          artificialNormal2.normalize();
-          n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
-          
-        } // LINES
-        
-        // for TRIANGLE_STRIPS, special case
-        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
-          
-          // check if this is the first or last element
-          if (k == 0 || k == currentGeometryLength - 1) {
-            
-            // add the artificial normal again
-            n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
-            
-          }
-          
-        } // TRIANGLE_STRIPS
-        
-      }
-
-      //
-      // NORMALS
-      // 
-      if (currentIndex < numberOfUnorderedNormals) {
-        
-        // grab the normal with the currentIndex, if it exists
-        var currentNormals = unorderedNormals.get(currentIndex);
-        
-        // .. and add it
-        n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
-        
-        // for LINES, add the next normal (neighbor)
-        if (this._objectType == X.displayable.types.LINES) {
-          
-          // the neighbor
-          var nextNormals = unorderedNormals.get(nextIndex);
-          
-          // .. and add it
-          n.add(nextNormals[0], nextNormals[1], nextNormals[2]);
-          
-        } // LINES
-        
-        // for TRIANGLE_STRIPS, special case
-        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
-          
-          // check if this is the first or last element
-          if (k == 0 || k == currentGeometryLength - 1) {
-            
-            // if this is the first or last point of the triangle strip, add it
-            // again
-            n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
-            
-          }
-          
-        } // TRIANGLE_STRIPS
-        
-
-      } else {
-        
-        // add an artificial normal
-        var artificialNormal = new goog.math.Vec3(currentPoint[0],
-            currentPoint[1], currentPoint[2]);
-        artificialNormal.normalize();
-        n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
-        
-        // for LINES, do it again
-        if (this._objectType == X.displayable.types.LINES) {
-          
-          // grab the next normal (artificial)
-          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
-              nextPoint[1], nextPoint[2]);
-          artificialNormal2.normalize();
-          n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
-          
-        } // LINES
-        
-        // for TRIANGLE_STRIPS, special case
-        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
-          
-          // check if this is the first or last element
-          if (k == 0 || k == currentGeometryLength - 1) {
-            
-            // add the artificial normal again
-            n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
-            
-          }
-          
-        } // TRIANGLE_STRIPS
-        
-      }
-
-      //
-      // NORMALS
-      // 
-      if (currentIndex < numberOfUnorderedNormals) {
-        
-        // grab the normal with the currentIndex, if it exists
-        var currentNormals = unorderedNormals.get(currentIndex);
-        
-        // .. and add it
-        n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
-        
-        // for LINES, add the next normal (neighbor)
-        if (this._objectType == X.displayable.types.LINES) {
-          
-          // the neighbor
-          var nextNormals = unorderedNormals.get(nextIndex);
-          
-          // .. and add it
-          n.add(nextNormals[0], nextNormals[1], nextNormals[2]);
-          
-        } // LINES
-        
-        // for TRIANGLE_STRIPS, special case
-        else if (this._objectType == X.displayable.types.TRIANGLE_STRIPS) {
-          
-          // check if this is the first or last element
-          if (k == 0 || k == currentGeometryLength - 1) {
-            
-            // if this is the first or last point of the triangle strip, add it
-            // again
-            n.add(currentNormals[0], currentNormals[1], currentNormals[2]);
-            
-          }
-          
-        } // TRIANGLE_STRIPS
-        
-
-      } else {
-        
-        // add an artificial normal
-        var artificialNormal = new goog.math.Vec3(currentPoint[0],
-            currentPoint[1], currentPoint[2]);
-        artificialNormal.normalize();
-        n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
-        
-        // for LINES, do it again
-        if (this._objectType == X.displayable.types.LINES) {
-          
-          // grab the next normal (artificial)
-          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
-              nextPoint[1], nextPoint[2]);
+          var artificialNormal2 = new goog.math.Vec3(-nextPoint[0],
+              -nextPoint[1], -nextPoint[2]);
           artificialNormal2.normalize();
           n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
           
