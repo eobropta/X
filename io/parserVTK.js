@@ -176,7 +176,10 @@ X.parserVTK.prototype.parse = function(container, object, data, flag) {
   
   // now, configure the object according to the objectType
   this.configure(p, n, s);
-  
+  // check if any scalars exist and if not delete them completely from object
+    if (s.array == null) {
+	delete object._scalars
+    }
   // .. and set the objectType
   object._type = this._objectType;
   
@@ -504,7 +507,11 @@ X.parserVTK.prototype.configure = function(p, n, s) {
   
   // cache often used values for fast access
   var numberOfUnorderedNormals = unorderedNormals.length;
-  var numberOfUnorderedPointScalars = unorderedPointScalars[1].length;
+  var numberOfUnorderedPointScalars;
+    if (unorderedPointScalars.length == 0) 
+	numberOfUnorderedPointScalars = 0;
+    else
+	numberOfUnorderedPointScalars = unorderedPointScalars[0].length;
 
     // initialize orderedPointScalars
     //var orderedPointScalars = new Float32Array(numberOfUnorderedPointScalars * 3);
@@ -930,26 +937,29 @@ X.parserVTK.prototype.configure = function(p, n, s) {
 	s._upperThreshold = 1.0;
     }
 
-    j = 0;
-    //for (j=0;j<orderedPointScalars.length;j++) {
+    // set scalar object values if scalars exist
+    if (orderedPointScalars.length > 0) {
+	// by default use the first read scalar values as default
+	j = 0;  
 	var orderedPointScalarsFloat32 = new Float32Array(orderedPointScalars[j].length);
-
-	for (k=0;k<orderedPointScalars[j].length;k++) {
 	
+	for (k=0;k<orderedPointScalars[j].length;k++) {
+	    
 	    // shift orderedPointScalars so min is 0 and normalize so that values are between 0 and 1
 	    orderedPointScalarsFloat32[k] = (orderedPointScalars[j][k] - minPointScalars[j]) / (maxPointScalars[j] - minPointScalars[j]);
 	}
-    //}
-    
-    //s._array = unorderedPointScalars[0]; // the un-ordered scalars
-    //s._array = orderedPointScalarsFloat32;
-    s._array = orderedPointScalars;
-    s._glArray = orderedPointScalarsFloat32; // the ordered, gl-Ready
-    s._minColor = [0.0, 0.0, 1.0];
-    s._maxColor = [1.0, 0.0, 0.0];
-    s._arrayNames = this._pointScalarsNames;
-    // now mark the scalars dirty
-    s._dirty = true;
+	
+	
+	//s._array = unorderedPointScalars[0]; // the un-ordered scalars
+	//s._array = orderedPointScalarsFloat32;
+	s._array = orderedPointScalars;
+	s._glArray = orderedPointScalarsFloat32; // the ordered, gl-Ready
+	s._minColor = [0.0, 0.0, 1.0];
+	s._maxColor = [1.0, 0.0, 0.0];
+	s._arrayNames = this._pointScalarsNames;
+	// now mark the scalars dirty
+	s._dirty = true;
+    }
 
 };
 
