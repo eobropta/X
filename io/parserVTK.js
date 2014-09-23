@@ -631,8 +631,8 @@ X.parserVTK.prototype.configure = function(p, n, s) {
         
         // add an artificial normal
 	// reversed normal direction to give proper lightning
-        var artificialNormal = new goog.math.Vec3(-currentPoint[0],
-            -currentPoint[1], -currentPoint[2]);
+        var artificialNormal = new goog.math.Vec3(currentPoint[0],
+            currentPoint[1], currentPoint[2]);
         artificialNormal.normalize();
         n.add(artificialNormal.x, artificialNormal.y, artificialNormal.z);
         
@@ -640,8 +640,8 @@ X.parserVTK.prototype.configure = function(p, n, s) {
         if (this._objectType == X.displayable.types.LINES) {
           
           // grab the next normal (artificial)
-          var artificialNormal2 = new goog.math.Vec3(-nextPoint[0],
-              -nextPoint[1], -nextPoint[2]);
+          var artificialNormal2 = new goog.math.Vec3(nextPoint[0],
+              nextPoint[1], nextPoint[2]);
           artificialNormal2.normalize();
           n.add(artificialNormal2.x, artificialNormal2.y, artificialNormal2.z);
           
